@@ -53,7 +53,7 @@ void updateBala(int tipo) {
             printf("     ");
         }
 
-        /* mover hacia arriba */
+        /* mover hacia arriba */  
         arregloBalas[i].y -= 4;
 
         /* si sale de la pantalla: desactivar */
