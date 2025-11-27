@@ -78,6 +78,10 @@ void updateBala(int tipo) {
     fflush(stdout);
 }
 
+Bala* obtenerBalas(void) {
+    return arregloBalas;
+}
+
 int balasDebenMoverse(float bala_delay, float *bala_previous) {
     float ahora = (float)clock() / CLOCKS_PER_SEC;
     if (ahora - *bala_previous >= bala_delay) {

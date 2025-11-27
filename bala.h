@@ -19,6 +19,7 @@ int iniciacionbala(int x,int y);
 void updateBala(int tipo);
 void inicializarBalas(void);
 int balasDebenMoverse(float bala_delay, float *bala_previous);
+Bala* obtenerBalas(void);
 
 #endif /* BALA_H */
 

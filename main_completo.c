@@ -25,6 +25,7 @@
 #include "input.h"
 #include "pantallas.h"
 #include "bala.h"
+#include "explosion_draw.h"
 
 /******************************************************************************/
 /*                           CONFIGURACIÓN                                    */
@@ -341,6 +342,68 @@ void actualizarOvniConDibujo(void) {
 }
 
 /******************************************************************************/
+/*                      DETECCIÓN DE COLISIONES                               */
+/******************************************************************************/
+
+void verificarColisionBalasAliens(void) {
+    Bala *balas = obtenerBalas();
+    
+    for (int b = 0; b < 10; b++) {
+        if (balas[b].estaActiva == 0) continue;
+        
+        int balaX = balas[b].x;
+        int balaY = balas[b].y;
+        
+        for (int fila = 0; fila < ALIEN_ROWS; fila++) {
+            for (int col = 0; col < ALIENS_PER_ROW; col++) {
+                if (!aliens[fila][col].estaVivo) continue;
+                
+                int alienX = aliens[fila][col].x;
+                int alienY = aliens[fila][col].y;
+                int anchoAlien = obtenerAnchoSprite(aliens[fila][col].tipoAlien);
+                
+                /* Verificar si la bala está dentro del área del alien */
+                if (balaX >= alienX && balaX < alienX + anchoAlien &&
+                    balaY >= alienY && balaY < alienY + ALIEN_HEIGHT) {
+                    
+                    /* Colisión detectada */
+                    balas[b].estaActiva = 0;
+                    aliens[fila][col].estaVivo = false;
+                    flota_total_vivos--;
+
+                    /* Borrar la bala primero */
+                    for (int i = 0; i < 4; i++) {
+                        gotoxy(balaX, balaY + i);
+                        printf("     ");
+                    }
+                    
+                    /* Animación de explosión: pequeña -> grande */
+                    fflush(stdout);
+                    draw_smallexplosion(alienX, alienY);
+                    fflush(stdout);
+                    usleep(150000);  /* 150ms para ver la explosión pequeña */
+                    
+                    draw_bigexplosion(alienX, alienY);
+                    fflush(stdout);
+                    usleep(150000);  /* 150ms para ver la explosión grande */
+                    
+                    /* Borrar el área del alien/explosión */
+                    for (int i = 0; i < ALIEN_HEIGHT; i++) {
+                        gotoxy(alienX, alienY + i);
+                        for (int j = 0; j < anchoAlien; j++) {
+                            printf(" ");
+                        }
+                    }
+                    fflush(stdout);
+                    
+                    return; /* Salir después de la primera colisión */
+                }
+            }
+        }
+    }
+}
+
+/******************************************************************************/
 /*                           JUEGO PRINCIPAL                                  */
 /******************************************************************************/
 
@@ -399,6 +462,9 @@ int ejecutarJuego() {
         if (balasDebenMoverse(bala_delay, &bala_previous)) {
             updateBala(BALA_JUGADOR);
         }
+        
+        /* 3c. VERIFICAR COLISIONES BALAS-ALIENS */
+        verificarColisionBalasAliens();
 
         /* 4. VERIFICAR GAME OVER */
         if (flotaLlegoAbajo()) {
