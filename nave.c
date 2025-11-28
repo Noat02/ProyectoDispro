@@ -27,7 +27,7 @@ void borrarNave(int x, int y) {
 void moverNave(Nave *n, int r) {
     const int MIN_X = 1;
     const int MAX_X = 230;
-    const int NAVE_Y = 60; 
+    const int NAVE_Y = 70; 
 
     if (!kbhit()) return;
     int ch = getch();

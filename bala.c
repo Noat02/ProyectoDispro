@@ -76,8 +76,9 @@ void updateBala(int tipo) {
         /* mover hacia arriba */  
         arregloBalas[i].y -= 4;
 
-        /* si sale de la pantalla: desactivar */
-        if (arregloBalas[i].y < 1) {
+        /* si sale de la pantalla o llega al HUD: desactivar */
+        /* El HUD está en Y=2, así que la bala debe detenerse antes de Y=5 */
+        if (arregloBalas[i].y < 5) {
             arregloBalas[i].estaActiva = 0;
             continue;
         }
@@ -116,7 +117,7 @@ void updateBalasAliens(void) {
         arregloBalasAliens[i].y += 2;
 
         /* si sale de la pantalla: desactivar */
-        if (arregloBalasAliens[i].y > 65) {
+        if (arregloBalasAliens[i].y > 80) {
             arregloBalasAliens[i].estaActiva = 0;
             continue;
         }

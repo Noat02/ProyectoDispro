@@ -42,7 +42,7 @@
 #define ALIEN_SPACING_Y 6  
 #define ALIEN_LIMITE_IZQ 5
 #define ALIEN_LIMITE_DER 230
-#define ALIEN_LIMITE_ABAJO 55
+#define ALIEN_LIMITE_ABAJO 65
 #define ALIEN_BAJAR_CANTIDAD 4
 
 /* OVNI */
@@ -53,16 +53,16 @@
 #define NUM_BARRERAS 5
 #define AGUJERO_START_X 20
 #define AGUJERO_SPACING_X 50
-#define AGUJERO_Y 48
+#define AGUJERO_Y 54
 #define AGUJERO_FASE_INICIAL 1
 
 /* Nave del Jugador */
 #define NAVE_X 100
-#define NAVE_Y 60
+#define NAVE_Y 70
 
 /* Vidas (HUD inferior) */
 #define LIVES_X 10
-#define LIVES_Y 75
+#define LIVES_Y 85
 #define MAX_LIVES 3
 #define LIFE_SPACING_X 10
 #define WHITE "\033[37m"
@@ -107,18 +107,52 @@ Nave nave;
 
 /* Score */
 int score = 0;
+int highScore = 0;
+
+/******************************************************************************/
+/*                      FUNCIONES DE HIGH SCORE                               */
+/******************************************************************************/
+
+void cargarHighScore(void) {
+    FILE *file = fopen("highscore.txt", "r");
+    if (file != NULL) {
+        fscanf(file, "%d", &highScore);
+        fclose(file);
+    } else {
+        highScore = 0;
+    }
+}
+
+void guardarHighScore(void) {
+    FILE *file = fopen("highscore.txt", "w");
+    if (file != NULL) {
+        fprintf(file, "%d", highScore);
+        fclose(file);
+    }
+}
 
 /******************************************************************************/
 /*                           FUNCIONES DE HUD                                 */
 /******************************************************************************/
 
-/* Prototipo */
+
 void draw_score_hud(int x, int y, const char *label);
 
 void actualizarScoreDisplay(void) {
     char scoreStr[30];
     sprintf(scoreStr, "SCORE <1>:%06d", score);
     draw_score_hud(SCORE_X, 2, scoreStr);
+    
+    /* Actualizar high score si el score actual es mayor */
+    if (score > highScore) {
+        highScore = score;
+    }
+    
+    /* Siempre dibujar el high score */
+    char hiScoreStr[30];
+    sprintf(hiScoreStr, "HI-SCORE:%06d", highScore);
+    draw_score_hud(HISCORE_X, 2, hiScoreStr);
+    
     fflush(stdout);
 }
 
@@ -133,7 +167,6 @@ void draw_score_hud(int x, int y, const char *label) {
 void dibujarHUD(void) {
     draw_score_hud(SCORE_X, 2, "SCORE <1>:000000");
     draw_score_hud(HISCORE_X, 2, "HI-SCORE:000000");
-    draw_score_hud(SCORE2_X, 2, "SCORE <2>:000000");
 }
 
 void dibujarBarreras(void) {
@@ -395,6 +428,10 @@ void verificarColisionAliensAgujeros(void) {
             int alienY = aliens[fila][col].y;
             int alienAncho = 5;  /* Ancho aproximado del alien */
             
+            /* CONDICIÓN PREVIA: El alien debe estar cerca del nivel del agujero */
+            /* Los agujeros están en Y=54, solo verificar si el alien está por debajo de Y=46 */
+            if (alienY < 42) continue; /* El alien está demasiado arriba, no puede tocar el agujero */
+            
             /* Verificar colisión con cada agujero */
             for (int i = 0; i < NUM_BARRERAS; i++) {
                 if (fases_agujeros[i] >= 9) continue; /* Agujero destruido */
@@ -406,23 +443,26 @@ void verificarColisionAliensAgujeros(void) {
                 
                 if (agujeroAlto == 0) continue;
                 
-                /* Verificar colisión con límites corregidos */
+                /* Verificar colisión con límites muy estrictos */
                 int colisionDetectada = 0;
                 
-                /* Verificar si hay solapamiento en Y primero */
+                /* El alien debe estar realmente sobre o dentro del agujero */
+                /* Verificar si hay solapamiento REAL en Y primero */
                 int alienYMin = alienY;
-                int alienYMax = alienY + ALIEN_HEIGHT;
-                int agujeroYMin = agujeroY;
+                int alienYMax = alienY + ALIEN_HEIGHT;  /* ALIEN_HEIGHT = 4 */
+                int agujeroYMin = agujeroY;              /* AGUJERO_Y = 54 */
                 int agujeroYMax = agujeroY + agujeroAlto;
                 
-                if (!(alienYMin >= agujeroYMax || alienYMax <= agujeroYMin)) {
+                /* Solapamiento en Y: el alien toca el agujero si su parte inferior alcanza la parte superior */
+                if (alienYMax >= agujeroYMin && alienYMin <= agujeroYMax) {
                     /* Si hay solapamiento en Y, verificar X */
                     int alienXMin = alienX;
                     int alienXMax = alienX + alienAncho;
                     int agujeroXMin = agujeroX;
                     int agujeroXMax = agujeroX + agujeroAncho;
                     
-                    if (!(alienXMin >= agujeroXMax || alienXMax <= agujeroXMin)) {
+                    /* Solapamiento en X: cualquier solapamiento cuenta */
+                    if (alienXMax > agujeroXMin && alienXMin < agujeroXMax) {
                         colisionDetectada = 1;
                     }
                 }
@@ -550,10 +590,23 @@ void verificarColisionBalasAliens(void) {
                 int alienY = aliens[fila][col].y;
                 int anchoAlien = obtenerAnchoSprite(aliens[fila][col].tipoAlien);
                 
-                /* Verificar si la bala está dentro del área del alien */
-                if (balaX >= alienX && balaX < alienX + anchoAlien &&
-                    balaY >= alienY && balaY < alienY + ALIEN_HEIGHT) {
+                /* Verificar colisión considerando toda la altura de la bala y su movimiento */
+                /* La bala tiene 4 líneas de altura y se mueve 4 líneas hacia arriba */
+                int colisionDetectada = 0;
+                
+                /* Verificar cada línea de la bala (4 líneas) + trayectoria (4 líneas) */
+                for (int lineaBala = 0; lineaBala < 8; lineaBala++) {
+                    int yBala = balaY + lineaBala;
                     
+                    /* Verificar si esta parte de la bala está dentro del alien */
+                    if (balaX >= alienX - 1 && balaX <= alienX + anchoAlien &&
+                        yBala >= alienY && yBala < alienY + ALIEN_HEIGHT) {
+                        colisionDetectada = 1;
+                        break;
+                    }
+                }
+                
+                if (colisionDetectada) {
                     /* Colisión detectada */
                     balas[b].estaActiva = 0;
                     
@@ -669,11 +722,20 @@ void verificarColisionBalasAliensNave(void) {
         int balaX = balasAliens[b].x;
         int balaY = balasAliens[b].y;
         
-        /* Verificar si la bala está dentro del área de la nave */
+        /* Verificar cada línea de la bala (4 líneas) contra la nave */
         /* La nave tiene aproximadamente 8 unidades de ancho y 8 de alto */
-        if (balaX >= nave.x && balaX < nave.x + 8 &&
-            balaY >= NAVE_Y && balaY < NAVE_Y + 8) {
-            
+        int balaColisiona = 0;
+        for (int lineaBala = 0; lineaBala < 4; lineaBala++) {
+            int yBala = balaY + lineaBala;
+            if (yBala >= NAVE_Y && yBala < NAVE_Y + 8) {
+                if (balaX >= nave.x && balaX < nave.x + 8) {
+                    balaColisiona = 1;
+                    break;
+                }
+            }
+        }
+        
+        if (balaColisiona) {
             /* Colisión detectada */
             balasAliens[b].estaActiva = 0;
             
@@ -737,23 +799,16 @@ void verificarColisionBalasAliensAgujeros(void) {
             
             if (agujeroAlto == 0) continue;
             
-            /* Verificar colisión con límites mejorados */
-            /* La bala tiene 1 carácter de ancho y 4 líneas de altura */
-            /* La bala se mueve 2 líneas hacia abajo por frame */
+            /* Verificar colisión */
+            /* La bala tiene 4 líneas de altura y se mueve 2 líneas hacia abajo */
             int balaColisiona = 0;
             
-            /* Primero verificar rango Y: la bala debe estar en el área vertical del agujero */
-            int balaYMin = balaY;
-            int balaYMax = balaY + 6;  /* 4 líneas de altura + 2 de movimiento */
-            int agujeroYMin = agujeroY;
-            int agujeroYMax = agujeroY + agujeroAlto;
-            
-            /* Si hay solapamiento en Y, verificar X */
-            if (!(balaYMin > agujeroYMax || balaYMax < agujeroYMin)) {
-                /* Verificar rango X: el agujero tiene formas irregulares en cada línea Y */
-                /* Por lo tanto, usamos todo el ancho del sprite (11 caracteres) + margen amplio */
-                /* Rango permisivo: desde X-2 hasta X+13 para capturar cualquier parte del agujero */
-                if (balaX >= agujeroX - 2 && balaX <= agujeroX + agujeroAncho + 2) {
+            /* Verificar si la bala está cerca del agujero en Y */
+            /* La bala necesita estar entre Y=48 y Y=62 para posiblemente tocar la barrera en Y=54 */
+            if (balaY >= agujeroY - 6 && balaY <= agujeroY + agujeroAlto + 2) {
+                /* Verificar si la X de la bala está dentro del rango del agujero */
+                /* agujeroAncho = 11, así que el rango es de agujeroX a agujeroX + 11 */
+                if (balaX >= agujeroX && balaX <= agujeroX + agujeroAncho) {
                     balaColisiona = 1;
                 }
             }
@@ -768,18 +823,24 @@ void verificarColisionBalasAliensAgujeros(void) {
                     printf("     ");
                 }
                 
-                /* Borrar el agujero actual completamente */
-                for (int j = 0; j < 8; j++) {
-                    gotoxy(agujeroX, agujeroY + j);
-                    printf("               ");  /* 15 espacios */
-                }
-                
-                /* Avanzar a la siguiente fase del agujero */
+                /* Degradar el agujero: avanzar a la siguiente fase */
                 fases_agujeros[i]++;
                 
-                /* Redibujar inmediatamente el agujero en su nueva fase */
+                /* Solo redibujar si la nueva fase es válida */
                 if (fases_agujeros[i] < 9) {
+                    /* Borrar solo el área necesaria para el agujero más grande (fase 1) */
+                    for (int j = 0; j < 8; j++) {
+                        gotoxy(agujeroX, agujeroY + j);
+                        printf("             ");  /* 13 espacios */
+                    }
+                    /* Dibujar el agujero en su nueva fase degradada */
                     draw_agujero(agujeroX, agujeroY, fases_agujeros[i]);
+                } else {
+                    /* El agujero está completamente destruido (fase 9) */
+                    for (int j = 0; j < 8; j++) {
+                        gotoxy(agujeroX, agujeroY + j);
+                        printf("             ");
+                    }
                 }
                 
                 fflush(stdout);
@@ -925,16 +986,19 @@ int ejecutarJuego() {
 
         /* 4. VERIFICAR GAME OVER */
         if (flotaLlegoAbajo()) {
+            guardarHighScore();
             return 0;  /* Perdió */
         }
         
         /* Verificar si la nave se quedó sin vidas */
         if (nave.vidas <= 0 || !nave.estaViva) {
+            guardarHighScore();
             return 0;  /* Perdió */
         }
 
         /* 5. VERIFICAR SI GANÓ */
         if (flota_total_vivos <= 0) {
+            guardarHighScore();
             return 1;  /* Ganó */
         }
 
@@ -951,6 +1015,9 @@ int ejecutarJuego() {
 int main(void) {
     setlocale(LC_ALL, "");
     srand(time(0));
+    
+    /* Cargar high score al inicio del programa */
+    cargarHighScore();
 
     int salir = 0;
     while (!salir) {
