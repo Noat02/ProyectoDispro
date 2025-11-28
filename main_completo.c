@@ -130,6 +130,67 @@ void dibujarBarreras(void) {
     }
 }
 
+int obtenerAltoAgujero(int fase) {
+    switch (fase) {
+        case 1: case 2: case 3: return 8;
+        case 4: return 7;
+        case 5: return 6;
+        case 6: return 4;
+        case 7: return 3;
+        case 8: return 2;
+        default: return 0;
+    }
+}
+
+void redibujarBarrerasDondeHayBalas(void) {
+    Bala *balasJugador = obtenerBalas();
+    
+    for (int b = 0; b < 10; b++) {
+        if (balasJugador[b].estaActiva == 0) continue;
+        
+        int balaX = balasJugador[b].x;
+        int balaY = balasJugador[b].y;
+        
+        /* Verificar si la bala está sobre algún agujero */
+        for (int i = 0; i < NUM_BARRERAS; i++) {
+            if (fases_agujeros[i] >= 9) continue; /* Agujero destruido */
+            
+            int agujeroX = AGUJERO_START_X + (i * AGUJERO_SPACING_X);
+            int agujeroY = AGUJERO_Y;
+            int agujeroAncho = 11;
+            int agujeroAlto = obtenerAltoAgujero(fases_agujeros[i]);
+            
+            if (agujeroAlto == 0) continue;
+            
+            /* Verificar si la bala pasó por el área del agujero o está en ella */
+            /* La bala se mueve 4 líneas hacia arriba, así que verificamos un rango más amplio */
+            int balaEnAgujero = 0;
+            
+            /* Verificar si la X de la bala está en el rango del agujero */
+            if (balaX >= agujeroX && balaX < agujeroX + agujeroAncho) {
+                /* Verificar si alguna parte de la bala (actual o anterior) está en el rango Y del agujero */
+                /* La bala tiene 4 líneas de altura y se mueve 4 líneas hacia arriba */
+                /* Verificamos desde balaY hasta balaY + 8 (posición actual + tamaño bala + movimiento) */
+                int balaYMin = balaY;
+                int balaYMax = balaY + 8;  /* 4 líneas de bala + 4 de movimiento */
+                int agujeroYMin = agujeroY;
+                int agujeroYMax = agujeroY + agujeroAlto;
+                
+                /* Verificar si hay solapamiento entre los rangos Y */
+                if (!(balaYMax < agujeroYMin || balaYMin > agujeroYMax)) {
+                    balaEnAgujero = 1;
+                }
+            }
+            
+            /* Si la bala pasó por el agujero, redibujar el agujero */
+            if (balaEnAgujero) {
+                draw_agujero(agujeroX, agujeroY, fases_agujeros[i]);
+            }
+        }
+    }
+    fflush(stdout);
+}
+
 void dibujarVidas(void) {
     draw_word("LIVES:", LIVES_X, LIVES_Y, WHITE);
     for (int i = 0; i < MAX_LIVES; i++) {
@@ -488,18 +549,6 @@ void verificarColisionBalasAliensNave(void) {
     }
 }
 
-int obtenerAltoAgujero(int fase) {
-    switch (fase) {
-        case 1: case 2: case 3: return 8;
-        case 4: return 7;
-        case 5: return 6;
-        case 6: return 4;
-        case 7: return 3;
-        case 8: return 2;
-        default: return 0;
-    }
-}
-
 void verificarColisionBalasAliensAgujeros(void) {
     Bala *balasAliens = obtenerBalasAliens();
     
@@ -545,11 +594,12 @@ void verificarColisionBalasAliensAgujeros(void) {
                     printf("     ");
                 }
                 
-                /* Borrar el agujero actual completamente (todas las líneas posibles) */
+                /* Borrar el agujero actual completamente (más ancho para asegurar) */
                 for (int j = 0; j < 8; j++) {
                     gotoxy(agujeroX, agujeroY + j);
-                    printf("             ");
+                    printf("               ");  /* 15 espacios para borrar completamente */
                 }
+                fflush(stdout);
                 
                 /* Avanzar a la siguiente fase del agujero */
                 fases_agujeros[i]++;
@@ -557,60 +607,9 @@ void verificarColisionBalasAliensAgujeros(void) {
                 /* Redibujar el agujero en su nueva fase si no está destruido */
                 if (fases_agujeros[i] < 9) {
                     draw_agujero(agujeroX, agujeroY, fases_agujeros[i]);
+                    fflush(stdout);
                 }
                 
-                fflush(stdout);
-                return; /* Salir después de la primera colisión */
-            }
-        }
-    }
-}
-
-void verificarColisionBalasJugadorAgujeros(void) {
-    Bala *balasJugador = obtenerBalas();
-    
-    for (int b = 0; b < 10; b++) {
-        if (balasJugador[b].estaActiva == 0) continue;
-        
-        int balaX = balasJugador[b].x;
-        int balaY = balasJugador[b].y;
-        
-        /* Verificar colisión con cada agujero */
-        for (int i = 0; i < NUM_BARRERAS; i++) {
-            int fase_actual = fases_agujeros[i];
-            
-            /* Solo verificar si el agujero no está completamente destruido */
-            if (fase_actual >= 9) continue;
-            
-            int agujeroX = AGUJERO_START_X + (i * AGUJERO_SPACING_X);
-            int agujeroY = AGUJERO_Y;
-            int agujeroAncho = 11;
-            int agujeroAlto = obtenerAltoAgujero(fase_actual);
-            
-            if (agujeroAlto == 0) continue;
-            
-            /* Verificar si la bala está dentro del área del agujero */
-            int balaColisiona = 0;
-            for (int lineaBala = 0; lineaBala < 4; lineaBala++) {
-                int yBala = balaY + lineaBala;
-                if (balaX >= agujeroX && balaX < agujeroX + agujeroAncho &&
-                    yBala >= agujeroY && yBala < agujeroY + agujeroAlto) {
-                    balaColisiona = 1;
-                    break;
-                }
-            }
-            
-            if (balaColisiona) {
-                /* Colisión detectada - la bala se detiene pero no daña el agujero */
-                balasJugador[b].estaActiva = 0;
-                
-                /* Borrar la bala */
-                for (int j = 0; j < 4; j++) {
-                    gotoxy(balaX, balaY + j);
-                    printf("     ");
-                }
-                
-                fflush(stdout);
                 return; /* Salir después de la primera colisión */
             }
         }
@@ -720,23 +719,24 @@ int ejecutarJuego() {
         /* 3b. ACTUALIZAR BALAS DEL JUGADOR */
         if (balasDebenMoverse(bala_delay, &bala_previous)) {
             updateBala(BALA_JUGADOR);
+            redibujarBarrerasDondeHayBalas(); /* Redibujar agujeros que fueron borrados por las balas */
         }
         
-        /* 3c. ALIENS DISPARAN */
+        /* 3c. VERIFICAR COLISIONES BALAS JUGADOR-ALIENS (las balas pasan a través de los agujeros) */
+        verificarColisionBalasAliens();
+        
+        /* 3e. ALIENS DISPARAN */
         aliensDisparan();
         
-        /* 3d. ACTUALIZAR BALAS DE ALIENS */
+        /* 3f. ACTUALIZAR BALAS DE ALIENS */
         if (balasDebenMoverse(bala_alien_delay, &bala_alien_previous)) {
             updateBalasAliens();
         }
         
-        /* 3e. VERIFICAR COLISIONES BALAS JUGADOR-ALIENS */
-        verificarColisionBalasAliens();
-        
-        /* 3f. VERIFICAR COLISIONES BALAS ALIENS-AGUJEROS */
+        /* 3g. VERIFICAR COLISIONES BALAS ALIENS-AGUJEROS (con daño) */
         verificarColisionBalasAliensAgujeros();
         
-        /* 3g. VERIFICAR COLISIONES BALAS ALIENS-NAVE */
+        /* 3h. VERIFICAR COLISIONES BALAS ALIENS-NAVE */
         verificarColisionBalasAliensNave();
 
         /* 4. VERIFICAR GAME OVER */
