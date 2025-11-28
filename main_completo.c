@@ -91,6 +91,7 @@ Ovni ovni;
 int ovni_x_anterior;
 float ovni_delay;
 float ovni_previous;
+bool ovni_fue_destruido = false;  /* Flag para saber si el ovni fue destruido */
 
 /* BALAS */
 float bala_delay;
@@ -104,9 +105,22 @@ int fases_agujeros[NUM_BARRERAS];
 /* Nave */
 Nave nave;
 
+/* Score */
+int score = 0;
+
 /******************************************************************************/
 /*                           FUNCIONES DE HUD                                 */
 /******************************************************************************/
+
+/* Prototipo */
+void draw_score_hud(int x, int y, const char *label);
+
+void actualizarScoreDisplay(void) {
+    char scoreStr[30];
+    sprintf(scoreStr, "SCORE <1>:%06d", score);
+    draw_score_hud(SCORE_X, 2, scoreStr);
+    fflush(stdout);
+}
 
 void draw_score_hud(int x, int y, const char *label) {
     int i = 0;
@@ -392,11 +406,28 @@ void verificarColisionAliensAgujeros(void) {
                 
                 if (agujeroAlto == 0) continue;
                 
-                /* Verificar si hay solapamiento entre alien y agujero */
-                int colisionX = (alienX < agujeroX + agujeroAncho) && (alienX + alienAncho > agujeroX);
-                int colisionY = (alienY < agujeroY + agujeroAlto) && (alienY + ALIEN_HEIGHT > agujeroY);
+                /* Verificar colisión con límites corregidos */
+                int colisionDetectada = 0;
                 
-                if (colisionX && colisionY) {
+                /* Verificar si hay solapamiento en Y primero */
+                int alienYMin = alienY;
+                int alienYMax = alienY + ALIEN_HEIGHT;
+                int agujeroYMin = agujeroY;
+                int agujeroYMax = agujeroY + agujeroAlto;
+                
+                if (!(alienYMin >= agujeroYMax || alienYMax <= agujeroYMin)) {
+                    /* Si hay solapamiento en Y, verificar X */
+                    int alienXMin = alienX;
+                    int alienXMax = alienX + alienAncho;
+                    int agujeroXMin = agujeroX;
+                    int agujeroXMax = agujeroX + agujeroAncho;
+                    
+                    if (!(alienXMin >= agujeroXMax || alienXMax <= agujeroXMin)) {
+                        colisionDetectada = 1;
+                    }
+                }
+                
+                if (colisionDetectada) {
                     /* Colisión detectada */
                     
                     /* Eliminar el alien */
@@ -464,13 +495,18 @@ int ovniDebeMoverse(void) {
 
 
 void actualizarOvniConDibujo(void) {
+    /* No hacer nada si el ovni fue destruido */
+    if (ovni_fue_destruido) return;
+    
     if (ovni.estaActivo) {
         if (ovniDebeMoverse()) {
             borrarOvni(ovni_x_anterior);
 
             ovni.x += ovni.direccion * 3;
 
-            if (ovni.x > 240 || ovni.x < -10) {
+            /* Ajustar límites para que no se salga de la pantalla */
+            /* Pantalla termina en 240, ovni tiene 8 de ancho */
+            if (ovni.x > 232 || ovni.x < 0) {
                 borrarOvni(ovni.x);
                 ovni.estaActivo = false;
                 ovni.x = OVNI_START_X;
@@ -484,7 +520,8 @@ void actualizarOvniConDibujo(void) {
         if ((rand() % OVNI_APARICION_PROB) == 0) {
             ovni.estaActivo = true;
             ovni.direccion = (rand() % 2) ? 1 : -1;
-            ovni.x = (ovni.direccion == 1) ? 5 : 235;
+            /* Ajustar posiciones iniciales para que no se salga */
+            ovni.x = (ovni.direccion == 1) ? 10 : 230;
             ovni_x_anterior = ovni.x;
             ovni_previous = (float)clock() / CLOCKS_PER_SEC;
             draw_ovni(ovni.x, OVNI_POS_Y);
@@ -519,6 +556,11 @@ void verificarColisionBalasAliens(void) {
                     
                     /* Colisión detectada */
                     balas[b].estaActiva = 0;
+                    
+                    /* Sumar puntos del alien al score */
+                    score += aliens[fila][col].puntos;
+                    actualizarScoreDisplay();
+                    
                     aliens[fila][col].estaVivo = false;
                     flota_total_vivos--;
 
@@ -550,6 +592,70 @@ void verificarColisionBalasAliens(void) {
                     return; /* Salir después de la primera colisión */
                 }
             }
+        }
+    }
+}
+
+void verificarColisionBalasOvni(void) {
+    if (!ovni.estaActivo) return;  /* No hay ovni en pantalla */
+    
+    Bala *balas = obtenerBalas();
+    
+    for (int b = 0; b < 10; b++) {
+        if (balas[b].estaActiva == 0) continue;
+        
+        int balaX = balas[b].x;
+        int balaY = balas[b].y;
+        int ovniX = ovni.x;
+        int ovniY = OVNI_POS_Y;
+        int ovniAncho = 8;  /* Ancho del sprite del ovni */
+        int ovniAlto = 4;   /* Alto del sprite del ovni */
+        
+        /* Verificar si la bala está dentro del área del ovni */
+        if (balaX >= ovniX && balaX < ovniX + ovniAncho &&
+            balaY >= ovniY && balaY < ovniY + ovniAlto) {
+            
+            /* Colisión detectada */
+            balas[b].estaActiva = 0;
+            
+            /* Sumar puntos del ovni al score (el ovni vale más, típicamente 100-300 puntos) */
+            int puntosOvni = 100 + (rand() % 201);  /* Entre 100 y 300 puntos aleatorios */
+            score += puntosOvni;
+            actualizarScoreDisplay();
+            
+            /* Desactivar el ovni permanentemente */
+            ovni.estaActivo = false;
+            ovni_fue_destruido = true;
+            
+            /* Borrar la bala */
+            for (int i = 0; i < 4; i++) {
+                gotoxy(balaX, balaY + i);
+                printf("     ");
+            }
+            
+            /* Mostrar explosión en el ovni */
+            draw_bigexplosion(ovniX, ovniY);
+            fflush(stdout);
+            usleep(200000);  /* 200ms para ver la explosión */
+            
+            /* Borrar el ovni y la explosión */
+            for (int i = 0; i < 4; i++) {
+                gotoxy(ovniX, ovniY + i);
+                printf("          ");  /* 10 espacios para borrar completamente */
+            }
+            
+            /* Mostrar los puntos obtenidos temporalmente */
+            gotoxy(ovniX, ovniY + 1);
+            printf("\033[33m%d\033[0m", puntosOvni);  /* Puntos en amarillo */
+            fflush(stdout);
+            usleep(500000);  /* 500ms para ver los puntos */
+            
+            /* Borrar los puntos */
+            gotoxy(ovniX, ovniY + 1);
+            printf("     ");
+            fflush(stdout);
+            
+            return; /* Salir después de la colisión */
         }
     }
 }
@@ -644,9 +750,10 @@ void verificarColisionBalasAliensAgujeros(void) {
             
             /* Si hay solapamiento en Y, verificar X */
             if (!(balaYMin > agujeroYMax || balaYMax < agujeroYMin)) {
-                /* Verificar rango X: la bala puede golpear cualquier parte del ancho del agujero */
-                /* Dar margen de ±1 para mejorar detección */
-                if (balaX >= agujeroX - 1 && balaX <= agujeroX + agujeroAncho + 1) {
+                /* Verificar rango X: el agujero tiene formas irregulares en cada línea Y */
+                /* Por lo tanto, usamos todo el ancho del sprite (11 caracteres) + margen amplio */
+                /* Rango permisivo: desde X-2 hasta X+13 para capturar cualquier parte del agujero */
+                if (balaX >= agujeroX - 2 && balaX <= agujeroX + agujeroAncho + 2) {
                     balaColisiona = 1;
                 }
             }
@@ -743,6 +850,7 @@ int ejecutarJuego() {
     ovni_x_anterior = -100;
     ovni_delay = 0.05f;
     ovni_previous = (float)clock() / CLOCKS_PER_SEC;
+    ovni_fue_destruido = false;  /* Resetear el flag al inicio de cada partida */
     
     bala_delay = 0.08f;
     bala_previous = (float)clock() / CLOCKS_PER_SEC;
@@ -752,9 +860,13 @@ int ejecutarJuego() {
 
     /* Posición inicial de la nave */
     nave.x = NAVE_X;
+    
+    /* Inicializar score */
+    score = 0;
 
     /* Dibujar elementos estáticos */
     dibujarHUD();
+    actualizarScoreDisplay();
     dibujarBarreras();
     dibujarVidas();
     draw_nave(nave.x, NAVE_Y);
@@ -793,6 +905,9 @@ int ejecutarJuego() {
         
         /* 3c. VERIFICAR COLISIONES BALAS JUGADOR-ALIENS (las balas pasan a través de los agujeros) */
         verificarColisionBalasAliens();
+        
+        /* 3d. VERIFICAR COLISIONES BALAS JUGADOR-OVNI */
+        verificarColisionBalasOvni();
         
         /* 3e. ALIENS DISPARAN */
         aliensDisparan();
