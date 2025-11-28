@@ -60,6 +60,8 @@ int actualizarAlien(Alien *a) {
     return llego_al_borde;
 }
 
+
+
 // --- Conector de Dibujo ---
 void dibujarAlienPorTipo(Alien *a, int frame) {
     if (a->estaVivo) {

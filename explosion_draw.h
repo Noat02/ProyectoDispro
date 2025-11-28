@@ -12,5 +12,6 @@
 /* Funciones para dibujar cada tipo de explosion */
 void draw_bigexplosion(int x, int y);
 void draw_smallexplosion(int x, int y);
+void draw_nave_explosion(int x, int y);
 
 #endif /* EXPLOSION_DRAW_H */

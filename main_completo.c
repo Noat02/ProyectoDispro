@@ -95,6 +95,11 @@ float ovni_previous;
 /* BALAS */
 float bala_delay;
 float bala_previous;
+float bala_alien_delay;
+float bala_alien_previous;
+
+/* AGUJEROS/BARRERAS */
+int fases_agujeros[NUM_BARRERAS];
 
 /* Nave */
 Nave nave;
@@ -119,6 +124,7 @@ void dibujarHUD(void) {
 
 void dibujarBarreras(void) {
     for (int i = 0; i < NUM_BARRERAS; i++) {
+        fases_agujeros[i] = AGUJERO_FASE_INICIAL;
         int x = AGUJERO_START_X + (i * AGUJERO_SPACING_X);
         draw_agujero(x, AGUJERO_Y, AGUJERO_FASE_INICIAL);
     }
@@ -129,6 +135,31 @@ void dibujarVidas(void) {
     for (int i = 0; i < MAX_LIVES; i++) {
         draw_nave(LIVES_X + 27 + (i * LIFE_SPACING_X), LIVES_Y - 3); 
     }
+}
+
+void actualizarVidasDisplay(void) {
+    /* Mostrar explosión en la vida que se acaba de perder */
+    if (nave.vidas >= 0 && nave.vidas < MAX_LIVES) {
+        int x_vida_perdida = LIVES_X + 27 + (nave.vidas * LIFE_SPACING_X);
+        draw_nave_explosion(x_vida_perdida, LIVES_Y - 3);
+        fflush(stdout);
+        usleep(300000);  /* 300ms para ver la explosión roja */
+    }
+    
+    /* Borrar el área de vidas */
+    for (int i = 0; i < MAX_LIVES; i++) {
+        int x = LIVES_X + 27 + (i * LIFE_SPACING_X);
+        for (int j = 0; j < 8; j++) {
+            gotoxy(x, LIVES_Y - 3 + j);
+            printf("        ");
+        }
+    }
+    
+    /* Dibujar solo las vidas restantes */
+    for (int i = 0; i < nave.vidas && i < MAX_LIVES; i++) {
+        draw_nave(LIVES_X + 27 + (i * LIFE_SPACING_X), LIVES_Y - 3);
+    }
+    fflush(stdout);
 }
 
 /******************************************************************************/
@@ -403,6 +434,230 @@ void verificarColisionBalasAliens(void) {
     }
 }
 
+void verificarColisionBalasAliensNave(void) {
+    Bala *balasAliens = obtenerBalasAliens();
+    
+    for (int b = 0; b < 20; b++) {
+        if (balasAliens[b].estaActiva == 0) continue;
+        
+        int balaX = balasAliens[b].x;
+        int balaY = balasAliens[b].y;
+        
+        /* Verificar si la bala está dentro del área de la nave */
+        /* La nave tiene aproximadamente 8 unidades de ancho y 8 de alto */
+        if (balaX >= nave.x && balaX < nave.x + 8 &&
+            balaY >= NAVE_Y && balaY < NAVE_Y + 8) {
+            
+            /* Colisión detectada */
+            balasAliens[b].estaActiva = 0;
+            
+            /* Borrar la bala */
+            for (int i = 0; i < 4; i++) {
+                gotoxy(balaX, balaY + i);
+                printf("     ");
+            }
+            fflush(stdout);
+            
+            /* Quitar una vida a la nave */
+            nave.vidas--;
+            
+            /* Mostrar explosión en la nave */
+            draw_nave_explosion(nave.x, NAVE_Y);
+            fflush(stdout);
+            usleep(200000);  
+            
+            /* Actualizar display de vidas */
+            actualizarVidasDisplay();
+            
+            /* Redibujar la nave si todavía tiene vidas */
+            if (nave.vidas > 0) {
+                draw_nave(nave.x, NAVE_Y);
+                nave.estaViva = true;
+            } else {
+                /* Borrar la nave */
+                for (int i = 0; i < 8; i++) {
+                    gotoxy(nave.x, NAVE_Y + i);
+                    printf("        ");
+                }
+                nave.estaViva = false;
+            }
+            
+            fflush(stdout);
+            return; /* Salir después de la primera colisión */
+        }
+    }
+}
+
+int obtenerAltoAgujero(int fase) {
+    switch (fase) {
+        case 1: case 2: case 3: return 8;
+        case 4: return 7;
+        case 5: return 6;
+        case 6: return 4;
+        case 7: return 3;
+        case 8: return 2;
+        default: return 0;
+    }
+}
+
+void verificarColisionBalasAliensAgujeros(void) {
+    Bala *balasAliens = obtenerBalasAliens();
+    
+    for (int b = 0; b < 20; b++) {
+        if (balasAliens[b].estaActiva == 0) continue;
+        
+        int balaX = balasAliens[b].x;
+        int balaY = balasAliens[b].y;
+        
+        /* Verificar colisión con cada agujero */
+        for (int i = 0; i < NUM_BARRERAS; i++) {
+            int fase_actual = fases_agujeros[i];
+            
+            /* Solo verificar si el agujero no está completamente destruido */
+            if (fase_actual >= 9) continue;
+            
+            int agujeroX = AGUJERO_START_X + (i * AGUJERO_SPACING_X);
+            int agujeroY = AGUJERO_Y;
+            int agujeroAncho = 11;  /* Ancho del sprite del agujero */
+            int agujeroAlto = obtenerAltoAgujero(fase_actual);
+            
+            if (agujeroAlto == 0) continue;
+            
+            /* Verificar si la bala está dentro del área del agujero */
+            /* Considerar que la bala tiene 4 líneas de altura */
+            int balaColisiona = 0;
+            for (int lineaBala = 0; lineaBala < 4; lineaBala++) {
+                int yBala = balaY + lineaBala;
+                if (balaX >= agujeroX && balaX < agujeroX + agujeroAncho &&
+                    yBala >= agujeroY && yBala < agujeroY + agujeroAlto) {
+                    balaColisiona = 1;
+                    break;
+                }
+            }
+            
+            if (balaColisiona) {
+                /* Colisión detectada */
+                balasAliens[b].estaActiva = 0;
+                
+                /* Borrar la bala */
+                for (int j = 0; j < 4; j++) {
+                    gotoxy(balaX, balaY + j);
+                    printf("     ");
+                }
+                
+                /* Borrar el agujero actual completamente (todas las líneas posibles) */
+                for (int j = 0; j < 8; j++) {
+                    gotoxy(agujeroX, agujeroY + j);
+                    printf("             ");
+                }
+                
+                /* Avanzar a la siguiente fase del agujero */
+                fases_agujeros[i]++;
+                
+                /* Redibujar el agujero en su nueva fase si no está destruido */
+                if (fases_agujeros[i] < 9) {
+                    draw_agujero(agujeroX, agujeroY, fases_agujeros[i]);
+                }
+                
+                fflush(stdout);
+                return; /* Salir después de la primera colisión */
+            }
+        }
+    }
+}
+
+void verificarColisionBalasJugadorAgujeros(void) {
+    Bala *balasJugador = obtenerBalas();
+    
+    for (int b = 0; b < 10; b++) {
+        if (balasJugador[b].estaActiva == 0) continue;
+        
+        int balaX = balasJugador[b].x;
+        int balaY = balasJugador[b].y;
+        
+        /* Verificar colisión con cada agujero */
+        for (int i = 0; i < NUM_BARRERAS; i++) {
+            int fase_actual = fases_agujeros[i];
+            
+            /* Solo verificar si el agujero no está completamente destruido */
+            if (fase_actual >= 9) continue;
+            
+            int agujeroX = AGUJERO_START_X + (i * AGUJERO_SPACING_X);
+            int agujeroY = AGUJERO_Y;
+            int agujeroAncho = 11;
+            int agujeroAlto = obtenerAltoAgujero(fase_actual);
+            
+            if (agujeroAlto == 0) continue;
+            
+            /* Verificar si la bala está dentro del área del agujero */
+            int balaColisiona = 0;
+            for (int lineaBala = 0; lineaBala < 4; lineaBala++) {
+                int yBala = balaY + lineaBala;
+                if (balaX >= agujeroX && balaX < agujeroX + agujeroAncho &&
+                    yBala >= agujeroY && yBala < agujeroY + agujeroAlto) {
+                    balaColisiona = 1;
+                    break;
+                }
+            }
+            
+            if (balaColisiona) {
+                /* Colisión detectada - la bala se detiene pero no daña el agujero */
+                balasJugador[b].estaActiva = 0;
+                
+                /* Borrar la bala */
+                for (int j = 0; j < 4; j++) {
+                    gotoxy(balaX, balaY + j);
+                    printf("     ");
+                }
+                
+                fflush(stdout);
+                return; /* Salir después de la primera colisión */
+            }
+        }
+    }
+}
+
+void aliensDisparan(void) {
+    /* Probabilidad de disparo: 1 en 100000 */
+    if ((rand() % 100000) != 0) return;
+    
+    /* Encontrar una columna aleatoria que tenga aliens vivos */
+    int columnas_disponibles[ALIENS_PER_ROW];
+    int num_columnas = 0;
+    
+    for (int col = 0; col < ALIENS_PER_ROW; col++) {
+        /* Buscar si hay al menos un alien vivo en esta columna */
+        for (int fila = 0; fila < ALIEN_ROWS; fila++) {
+            if (aliens[fila][col].estaVivo) {
+                columnas_disponibles[num_columnas] = col;
+                num_columnas++;
+                break;
+            }
+        }
+    }
+    
+    if (num_columnas == 0) return; /* No hay aliens vivos */
+    
+    /* Seleccionar una columna aleatoria */
+    int col_seleccionada = columnas_disponibles[rand() % num_columnas];
+    
+    /* Encontrar el alien más abajo en esa columna */
+    int fila_mas_abajo = -1;
+    for (int fila = ALIEN_ROWS - 1; fila >= 0; fila--) {
+        if (aliens[fila][col_seleccionada].estaVivo) {
+            fila_mas_abajo = fila;
+            break;
+        }
+    }
+    
+    if (fila_mas_abajo != -1) {
+        /* Hacer que el alien dispare */
+        int alienX = aliens[fila_mas_abajo][col_seleccionada].x;
+        int alienY = aliens[fila_mas_abajo][col_seleccionada].y;
+        iniciacionbalaAlien(alienX + 2, alienY + ALIEN_HEIGHT);
+    }
+}
+
 /******************************************************************************/
 /*                           JUEGO PRINCIPAL                                  */
 /******************************************************************************/
@@ -418,6 +673,7 @@ int ejecutarJuego() {
     inicializarOvni(&ovni);
     inicializarNave(&nave);
     inicializarBalas();
+    inicializarBalasAliens();
     
     ovni_x_anterior = -100;
     ovni_delay = 0.05f;
@@ -425,6 +681,9 @@ int ejecutarJuego() {
     
     bala_delay = 0.08f;
     bala_previous = (float)clock() / CLOCKS_PER_SEC;
+    
+    bala_alien_delay = 0.05f;
+    bala_alien_previous = (float)clock() / CLOCKS_PER_SEC;
 
     /* Posición inicial de la nave */
     nave.x = NAVE_X;
@@ -458,16 +717,35 @@ int ejecutarJuego() {
         /* 3. MOVER NAVE SEGÚN INPUT */
         moverNave(&nave, r);
         
-        /* 3b. ACTUALIZAR BALAS */
+        /* 3b. ACTUALIZAR BALAS DEL JUGADOR */
         if (balasDebenMoverse(bala_delay, &bala_previous)) {
             updateBala(BALA_JUGADOR);
         }
         
-        /* 3c. VERIFICAR COLISIONES BALAS-ALIENS */
+        /* 3c. ALIENS DISPARAN */
+        aliensDisparan();
+        
+        /* 3d. ACTUALIZAR BALAS DE ALIENS */
+        if (balasDebenMoverse(bala_alien_delay, &bala_alien_previous)) {
+            updateBalasAliens();
+        }
+        
+        /* 3e. VERIFICAR COLISIONES BALAS JUGADOR-ALIENS */
         verificarColisionBalasAliens();
+        
+        /* 3f. VERIFICAR COLISIONES BALAS ALIENS-AGUJEROS */
+        verificarColisionBalasAliensAgujeros();
+        
+        /* 3g. VERIFICAR COLISIONES BALAS ALIENS-NAVE */
+        verificarColisionBalasAliensNave();
 
         /* 4. VERIFICAR GAME OVER */
         if (flotaLlegoAbajo()) {
+            return 0;  /* Perdió */
+        }
+        
+        /* Verificar si la nave se quedó sin vidas */
+        if (nave.vidas <= 0 || !nave.estaViva) {
             return 0;  /* Perdió */
         }
 

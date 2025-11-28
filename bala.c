@@ -14,6 +14,7 @@
 
 
 Bala arregloBalas[10];
+Bala arregloBalasAliens[20];
 
 char *bala759[] = {
     "█"
@@ -25,6 +26,12 @@ void inicializarBalas(void) {
     }
 }
 
+void inicializarBalasAliens(void) {
+    for (int i = 0; i < 20; i++) {
+        arregloBalasAliens[i].estaActiva = 0;
+    }
+}
+
 int iniciacionbala(int x,int y) {
     for(int i=0; i<10; i++) {
         if (arregloBalas[i].estaActiva == 0) {
@@ -32,6 +39,19 @@ int iniciacionbala(int x,int y) {
             arregloBalas[i].y = y;
             arregloBalas[i].estaActiva = 1;
             arregloBalas[i].direccion = 1;
+            return i;
+        }
+    }
+    return -1;
+}
+
+int iniciacionbalaAlien(int x,int y) {
+    for(int i=0; i<20; i++) {
+        if (arregloBalasAliens[i].estaActiva == 0) {
+            arregloBalasAliens[i].x = x;
+            arregloBalasAliens[i].y = y;
+            arregloBalasAliens[i].estaActiva = 1;
+            arregloBalasAliens[i].direccion = -1; /* balas de aliens van hacia abajo */
             return i;
         }
     }
@@ -78,8 +98,42 @@ void updateBala(int tipo) {
     fflush(stdout);
 }
 
+void updateBalasAliens(void) {
+
+    for (int i = 0; i < 20; i++) {
+        if (arregloBalasAliens[i].estaActiva == 0) continue;
+
+        int x = arregloBalasAliens[i].x;
+        int oldY = arregloBalasAliens[i].y;
+
+        /* borrar la posición anterior completa */
+        for (int j = 0; j < 4; j++) {
+            gotoxy(x, oldY + j);
+            printf("     ");
+        }
+
+        /* mover hacia abajo */  
+        arregloBalasAliens[i].y += 2;
+
+        /* si sale de la pantalla: desactivar */
+        if (arregloBalasAliens[i].y > 65) {
+            arregloBalasAliens[i].estaActiva = 0;
+            continue;
+        }
+
+        /* dibujar bala de alien */
+        draw_bala_alien(arregloBalasAliens[i].x, arregloBalasAliens[i].y);
+    }
+
+    fflush(stdout);
+}
+
 Bala* obtenerBalas(void) {
     return arregloBalas;
+}
+
+Bala* obtenerBalasAliens(void) {
+    return arregloBalasAliens;
 }
 
 int balasDebenMoverse(float bala_delay, float *bala_previous) {

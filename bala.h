@@ -16,10 +16,14 @@ typedef struct {
 
 /* prototipos públicos */
 int iniciacionbala(int x,int y);
+int iniciacionbalaAlien(int x,int y);
 void updateBala(int tipo);
+void updateBalasAliens(void);
 void inicializarBalas(void);
+void inicializarBalasAliens(void);
 int balasDebenMoverse(float bala_delay, float *bala_previous);
 Bala* obtenerBalas(void);
+Bala* obtenerBalasAliens(void);
 
 #endif /* BALA_H */
 

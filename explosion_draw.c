@@ -40,3 +40,11 @@ void draw_smallexplosion(int x, int y) {
         printf("%s%s%s", YELLOW, explosion_small[i], RESET);
     }
 }
+
+void draw_nave_explosion(int x, int y) {
+    char **sprite = explosion_nave;
+    for (int i = 0; i < 8; i++) {
+        gotoxy(x, y + i);  
+        printf("%s%s%s", RED, explosion_nave[i], RESET);
+    }
+}
