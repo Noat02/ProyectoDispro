@@ -372,6 +372,65 @@ int flotaLlegoAbajo(void) {
     return 0;
 }
 
+void verificarColisionAliensAgujeros(void) {
+    for (int fila = 0; fila < ALIEN_ROWS; fila++) {
+        for (int col = 0; col < ALIENS_PER_ROW; col++) {
+            if (!aliens[fila][col].estaVivo) continue;
+            
+            int alienX = aliens[fila][col].x;
+            int alienY = aliens[fila][col].y;
+            int alienAncho = 5;  /* Ancho aproximado del alien */
+            
+            /* Verificar colisión con cada agujero */
+            for (int i = 0; i < NUM_BARRERAS; i++) {
+                if (fases_agujeros[i] >= 9) continue; /* Agujero destruido */
+                
+                int agujeroX = AGUJERO_START_X + (i * AGUJERO_SPACING_X);
+                int agujeroY = AGUJERO_Y;
+                int agujeroAncho = 11;
+                int agujeroAlto = obtenerAltoAgujero(fases_agujeros[i]);
+                
+                if (agujeroAlto == 0) continue;
+                
+                /* Verificar si hay solapamiento entre alien y agujero */
+                int colisionX = (alienX < agujeroX + agujeroAncho) && (alienX + alienAncho > agujeroX);
+                int colisionY = (alienY < agujeroY + agujeroAlto) && (alienY + ALIEN_HEIGHT > agujeroY);
+                
+                if (colisionX && colisionY) {
+                    /* Colisión detectada */
+                    
+                    /* Eliminar el alien */
+                    aliens[fila][col].estaVivo = false;
+                    flota_total_vivos--;
+                    
+                    /* Borrar el alien de la pantalla */
+                    for (int i = 0; i < ALIEN_HEIGHT; i++) {
+                        gotoxy(alienX, alienY + i);
+                        printf("        ");
+                    }
+                    
+                    /* Borrar el agujero */
+                    for (int j = 0; j < 8; j++) {
+                        gotoxy(agujeroX, agujeroY + j);
+                        printf("               ");
+                    }
+                    
+                    /* Degradar el agujero una fase */
+                    fases_agujeros[i]++;
+                    
+                    /* Redibujar el agujero en su nueva fase si no está destruido */
+                    if (fases_agujeros[i] < 9) {
+                        draw_agujero(agujeroX, agujeroY, fases_agujeros[i]);
+                    }
+                    
+                    fflush(stdout);
+                    return; /* Salir después de procesar una colisión */
+                }
+            }
+        }
+    }
+}
+
 int flotaDebeMoverse(void) {
     float ahora = (float)clock() / CLOCKS_PER_SEC;
     if (ahora - flota_previous >= flota_delay) {
@@ -572,15 +631,23 @@ void verificarColisionBalasAliensAgujeros(void) {
             
             if (agujeroAlto == 0) continue;
             
-            /* Verificar si la bala está dentro del área del agujero */
-            /* Considerar que la bala tiene 4 líneas de altura */
+            /* Verificar colisión con límites mejorados */
+            /* La bala tiene 1 carácter de ancho y 4 líneas de altura */
+            /* La bala se mueve 2 líneas hacia abajo por frame */
             int balaColisiona = 0;
-            for (int lineaBala = 0; lineaBala < 4; lineaBala++) {
-                int yBala = balaY + lineaBala;
-                if (balaX >= agujeroX && balaX < agujeroX + agujeroAncho &&
-                    yBala >= agujeroY && yBala < agujeroY + agujeroAlto) {
+            
+            /* Primero verificar rango Y: la bala debe estar en el área vertical del agujero */
+            int balaYMin = balaY;
+            int balaYMax = balaY + 6;  /* 4 líneas de altura + 2 de movimiento */
+            int agujeroYMin = agujeroY;
+            int agujeroYMax = agujeroY + agujeroAlto;
+            
+            /* Si hay solapamiento en Y, verificar X */
+            if (!(balaYMin > agujeroYMax || balaYMax < agujeroYMin)) {
+                /* Verificar rango X: la bala puede golpear cualquier parte del ancho del agujero */
+                /* Dar margen de ±1 para mejorar detección */
+                if (balaX >= agujeroX - 1 && balaX <= agujeroX + agujeroAncho + 1) {
                     balaColisiona = 1;
-                    break;
                 }
             }
             
@@ -594,22 +661,21 @@ void verificarColisionBalasAliensAgujeros(void) {
                     printf("     ");
                 }
                 
-                /* Borrar el agujero actual completamente (más ancho para asegurar) */
+                /* Borrar el agujero actual completamente */
                 for (int j = 0; j < 8; j++) {
                     gotoxy(agujeroX, agujeroY + j);
-                    printf("               ");  /* 15 espacios para borrar completamente */
+                    printf("               ");  /* 15 espacios */
                 }
-                fflush(stdout);
                 
                 /* Avanzar a la siguiente fase del agujero */
                 fases_agujeros[i]++;
                 
-                /* Redibujar el agujero en su nueva fase si no está destruido */
+                /* Redibujar inmediatamente el agujero en su nueva fase */
                 if (fases_agujeros[i] < 9) {
                     draw_agujero(agujeroX, agujeroY, fases_agujeros[i]);
-                    fflush(stdout);
                 }
                 
+                fflush(stdout);
                 return; /* Salir después de la primera colisión */
             }
         }
@@ -712,6 +778,9 @@ int ejecutarJuego() {
 
         /* 2. ACTUALIZAR OVNI */
         actualizarOvniConDibujo();
+
+        /* 2d. VERIFICAR COLISIONES ALIENS-AGUJEROS */
+        verificarColisionAliensAgujeros();
 
         /* 3. MOVER NAVE SEGÚN INPUT */
         moverNave(&nave, r);
